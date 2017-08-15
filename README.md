@@ -21,4 +21,5 @@ or add the pycocotools path to  PYTHONPATH of ~/.bashrc file.
         --set=train \
         --output_path=/where/you/want/to/save/pascal.record
         --shuffle_imgs=True
+        --preferred_classes=1,2,3, etc...
 ```
