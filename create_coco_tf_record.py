@@ -33,9 +33,10 @@ import logging
 from object_detection.utils import dataset_util
 
 flags = tf.app.flags
+flags.DEFINE_string('preferred_classes', '', 'only write tf-records for specified classes')
 flags.DEFINE_string('data_dir', '', 'Root directory to raw Microsoft COCO dataset.')
 flags.DEFINE_string('set', 'train', 'Convert training set or validation set')
-flags.DEFINE_string('output_filepath', '', 'Path to output TFRecord')
+flags.DEFINE_string('output_file', '', 'Output TFRecord filename')
 flags.DEFINE_bool('shuffle_imgs',True,'whether to shuffle images of coco')
 FLAGS = flags.FLAGS
 
@@ -61,7 +62,7 @@ def load_coco_dection_dataset(imgs_dir, annotations_filepath, shuffle_img = True
 
     nb_imgs = len(img_ids)
     for index, img_id in enumerate(img_ids):
-        if index > 2000:break
+        if index > 82783:break
         if index % 100 == 0:
             print("Readling images: %d / %d "%(index, nb_imgs))
         img_info = {}
@@ -81,6 +82,15 @@ def load_coco_dection_dataset(imgs_dir, annotations_filepath, shuffle_img = True
                          # the format of coco bounding boxs is [Xmin, Ymin, width, height]
             bboxes.append(bboxes_data)
             labels.append(ann['category_id'])
+        isPreferredClass = False
+    #print("preferred classes are: ", FLAGS.preferred_classes)
+        if len(FLAGS.preferred_classes)>0:
+          for label in labels:
+        #print("here's a label to compare:", label)
+            if str(label) in FLAGS.preferred_classes:
+              isPreferredClass = True
+        if not isPreferredClass:
+          continue
 
 
         img_path = os.path.join(imgs_dir, img_detail['file_name'])
@@ -104,6 +114,16 @@ def dict_to_coco_example(img_data):
     Returns:
         example: The converted tf.Example
     """
+    isPreferredClass = False
+    #print("preferred classes are: ", FLAGS.preferred_classes)
+    if len(FLAGS.preferred_classes)>0:
+      for label in img_data['labels']:
+        #print("here's a label to compare:", label)
+        if str(label) in FLAGS.preferred_classes:
+          isPreferredClass = True
+    if not isPreferredClass:
+      return (False, None)
+
     bboxes = img_data['bboxes']
     xmin, xmax, ymin, ymax = [], [], [], []
     for bbox in bboxes:
@@ -123,7 +143,7 @@ def dict_to_coco_example(img_data):
         'image/encoded': dataset_util.bytes_feature(img_data['pixel_data']),
         'image/format': dataset_util.bytes_feature('jpeg'.encode('utf-8')),
     }))
-    return example
+    return (True, example)
 
 def main(_):
     if FLAGS.set == "train":
@@ -139,13 +159,24 @@ def main(_):
     # load total coco data
     coco_data = load_coco_dection_dataset(imgs_dir,annotations_filepath,shuffle_img=FLAGS.shuffle_imgs)
     total_imgs = len(coco_data)
+    print("preferred classes are: ", FLAGS.preferred_classes)
     # write coco data to tf record
-    with tf.python_io.TFRecordWriter(FLAGS.output_filepath) as tfrecord_writer:
-        for index, img_data in enumerate(coco_data):
+    prefClassCount=0
+    tfrecord_writer = tf.python_io.TFRecordWriter(FLAGS.output_file)
+    #with tf.python_io.TFRecordWriter(FLAGS.output_filepath) as tfrecord_writer:
+    print("opened a TFRecordWriter")
+    for index, img_data in enumerate(coco_data):
+            #print("enumerating coco_data")
             if index % 100 == 0:
                 print("Converting images: %d / %d" % (index, total_imgs))
-            example = dict_to_coco_example(img_data)
-            tfrecord_writer.write(example.SerializeToString())
+            preferredClass, example = dict_to_coco_example(img_data)
+            if not preferredClass:
+              #print("skipping a class")
+              continue
+            elif preferredClass:
+              prefClassCount+=1
+              print("found a preferredClass, that's:", prefClassCount)
+              tfrecord_writer.write(example.SerializeToString())
 
 
 if __name__ == "__main__":
